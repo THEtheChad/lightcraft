@@ -10,6 +10,7 @@ use lightcraft_geom::{Affine, CropGeometry, Homography, Orientation, Point, Rect
 use lightcraft_raster::resample::{Filter, resize};
 use lightcraft_raster::{Rgb32f, par_rows};
 
+use crate::Sizing;
 use crate::optics::{Warp, reorient_lens};
 
 /// Linear value of areas outside the source after a warp (a light neutral, like an empty canvas).
@@ -186,6 +187,24 @@ impl Frame {
         ((w.round() as usize).max(1), (h.round() as usize).max(1))
     }
 
+    /// The output size `max_w × max_h` asks for under `sizing`. [`Sizing::Exact`] keeps the pair
+    /// when it is a rounding of this frame's aspect, allowing for this source's own rounding (a
+    /// reduced source of a larger photo): fitting it again would lose up to a pixel on the long
+    /// edge (5×3 at 4×2 → 3×2). A pair that is not one (sized from dimensions the decoded source
+    /// disagrees with) is fitted rather than stretched.
+    pub fn sized(&self, max_w: usize, max_h: usize, sizing: Sizing) -> (usize, usize) {
+        let (w, h) = (max_w.max(1), max_h.max(1));
+        if sizing == Sizing::Exact {
+            let (fw, fh) = (w as f64, h as f64);
+            let slack = 0.5 / self.ow.max(1.0) + 0.5 / self.oh.max(1.0);
+            let (lo, hi) = ((fw - 0.5) / (fh + 0.5) * (1.0 - slack), (fw + 0.5) / (fh - 0.5) * (1.0 + slack));
+            if (lo..=hi).contains(&self.aspect()) {
+                return (w, h);
+            }
+        }
+        self.fit(w, h)
+    }
+
     /// Output pixels per unit of the oriented image's long edge.
     pub fn px_per_long(&self, out_w: usize) -> f64 {
         let r = self.crop.rect_px(self.ow, self.oh);
@@ -357,6 +376,27 @@ mod tests {
         let p = m.apply(Point::new(150.0, 100.0));
         assert!((p.x - 0.5).abs() < 1e-9 && (p.y - 0.5).abs() < 1e-9);
         assert!((f.px_per_long(300) - 300.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn exact_sizes_are_kept_and_fit_boxes_fitted() {
+        let s = DevelopSettings::default();
+        let f = Frame::new(5, 3, &s, true);
+        assert_eq!(f.fit(4, 2), (3, 2), "a box is fitted, as before");
+        assert_eq!(f.sized(4, 2, Sizing::Fit), (3, 2));
+        assert_eq!(f.sized(4, 2, Sizing::Exact), (4, 2), "an export's resolved size is kept");
+        // a 6000×4000 photo's 2560×1707 preview: 800×533 (resolved from 3:2) stays 800×533
+        let f = Frame::new(2560, 1707, &s, true);
+        assert_eq!(f.fit(800, 533), (799, 533));
+        assert_eq!(f.sized(800, 533, Sizing::Exact), (800, 533));
+        assert_eq!(f.sized(2560, 1707, Sizing::Exact), (2560, 1707));
+        // and rotated
+        let r = DevelopSettings { orientation: Orientation::Rotate90, ..Default::default() };
+        assert_eq!(Frame::new(2560, 1707, &r, true).sized(533, 800, Sizing::Exact), (533, 800));
+        // a pair that is no rounding of the frame's aspect is fitted, never stretched
+        assert_eq!(Frame::new(2560, 1707, &s, true).sized(533, 800, Sizing::Exact), (533, 355));
+        assert_eq!(Frame::new(6000, 4000, &s, true).sized(6024, 4020, Sizing::Exact), (6024, 4016));
+        assert_eq!(Frame::new(5, 3, &s, true).sized(0, 0, Sizing::Exact), (1, 1));
     }
 
     #[test]

@@ -139,6 +139,21 @@ fn render_subcommand() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("unknown control"));
 }
 
+/// `--size` is the output's long edge: a 5×3 input at `--size 4` is 4×2, not fitted again into 3×2.
+#[test]
+fn render_size_is_the_exact_long_edge() {
+    for (w, h, want) in [(5, 3, (4, 2)), (3, 5, (2, 4))] {
+        let input = tmp(&format!("exact-{w}x{h}.png"));
+        let img = lightcraft_raster::Rgba8::from_fn(w, h, |x, y| [(x * 50) as u8, (y * 50) as u8, 100, 255]);
+        std::fs::write(&input, lightcraft_codecs::encode_png(&lightcraft_codecs::EncodeImage::rgba8(&img), &Default::default()).unwrap()).unwrap();
+        let out = tmp(&format!("exact-{w}x{h}-out.png"));
+        let st = Command::new(BIN).args(["render", input.to_str().unwrap(), "-o", out.to_str().unwrap(), "--size", "4"]).status().unwrap();
+        assert!(st.success());
+        let d = lightcraft_codecs::decode(&std::fs::read(&out).unwrap(), Default::default()).unwrap();
+        assert_eq!((d.width as usize, d.height as usize), want, "{w}×{h} at --size 4");
+    }
+}
+
 /// Issue #93: `render IMG -o IMG` replaced its own input with the render.
 #[test]
 fn render_refuses_to_overwrite_its_input() {

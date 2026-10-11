@@ -859,3 +859,55 @@ mod apple_photos {
         assert_eq!(s.commands().into_iter().find(|c| c.id == "export.addToPhotos").unwrap().enabled, cfg!(target_os = "macos"));
     }
 }
+
+/// A `w × h` PNG original imported into a library on disk.
+fn library_with_png(tag: &str, w: usize, h: usize) -> (Session, lightcraft_catalog::PhotoId, std::path::PathBuf) {
+    let dir = temp_dir(tag);
+    let src = dir.join("IMG_1.png");
+    let img = lightcraft_raster::Rgba8::from_fn(w, h, |x, y| [(x * 255 / w) as u8, (y * 255 / h) as u8, 90, 255]);
+    let png = lightcraft_codecs::encode_png(&lightcraft_codecs::EncodeImage::rgba8(&img), &Default::default()).unwrap();
+    std::fs::write(&src, png).unwrap();
+    let mut s = Session::new().with_fs();
+    s.execute("library.import", &json!({"paths": [src.to_string_lossy()]})).unwrap();
+    let id = s.catalog.photos().next().unwrap().id;
+    (s, id, dir)
+}
+
+/// The size an export resolves (`export::output_size`) is the size of the file: the render does
+/// not fit it again into the frame's aspect (5×3 at long edge 4 came out 3×2).
+#[test]
+fn exports_have_exactly_the_resolved_size() {
+    for (i, (w, h, json, want, depth)) in [
+        (5, 3, json!({"format": "png", "longEdge": 4}), (4, 2), 8),
+        (3, 5, json!({"format": "png", "longEdge": 4}), (2, 4), 8),
+        (5, 3, json!({"format": "tiff", "longEdge": 4, "bitDepth": 16}), (4, 2), 16),
+        (5, 3, json!({"format": "jpeg", "width": 4}), (4, 2), 8),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (mut s, id, dir) = library_with_png(&format!("export-exact-{i}"), w, h);
+        let o = ExportOptions::from_json(&json);
+        assert_eq!(crate::export::output_size(s.catalog.photo(id).unwrap(), &o), want, "{json}");
+        let e = export_photo(&mut s, id, &o, 1).unwrap();
+        assert_eq!((e.width, e.height), want, "{w}×{h} {json}");
+        let d = lightcraft_codecs::decode(&e.bytes, Default::default()).unwrap();
+        assert_eq!((d.width, d.height, d.bit_depth), (want.0 as u32, want.1 as u32, depth), "{w}×{h} {json}: the file");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// An export made from a reduced source (here the 512 px thumbnail level, 512×341) keeps the
+/// size resolved from the photo's own aspect: 1500×1000 at long edge 400 is 400×267, not the
+/// 400×266 the proxy's slightly different aspect fits to. (Same as 6000×4000 at 800 from the
+/// 2560×1707 preview level, which came out 799×533.)
+#[test]
+fn exports_from_a_reduced_source_keep_the_resolved_size() {
+    let (mut s, id, dir) = library_with_png("export-exact-proxy", 1500, 1000);
+    let o = ExportOptions::from_json(&json!({"format": "png", "longEdge": 400}));
+    assert_eq!(crate::export::output_size(s.catalog.photo(id).unwrap(), &o), (400, 267));
+    let e = export_photo(&mut s, id, &o, 1).unwrap();
+    let d = lightcraft_codecs::decode(&e.bytes, Default::default()).unwrap();
+    assert_eq!((e.width, e.height, d.width, d.height), (400, 267, 400, 267));
+    let _ = std::fs::remove_dir_all(&dir);
+}

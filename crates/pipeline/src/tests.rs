@@ -90,6 +90,26 @@ fn resolution_independence_of_local_contrast() {
     assert!(err < 9.0, "mean abs error {err}");
 }
 
+/// An exact request is rendered at its size, 8-bit and deep alike, where a fit box of the same
+/// size fits the source's (proxy-rounded) aspect.
+#[test]
+fn exact_requests_render_at_their_size() {
+    use crate::OutputDepth;
+    // the 512 px proxy of a 1500×1000 photo, exported at long edge 400 (400×267)
+    let src = lightcraft_scenes::demo_library()[0].render(512, 341);
+    let s = DevelopSettings::default();
+    let fit = render(&src, &SourceInfo::default(), &s, &RenderRequest::fit(400, 267));
+    assert_eq!((fit.image.width, fit.image.height), (400, 266));
+    assert_eq!(crate::output_size(512, 341, &s, &RenderRequest::exact(400, 267)), (400, 267));
+    for depth in [OutputDepth::U8, OutputDepth::U16, OutputDepth::F32Hdr] {
+        let r = render(&src, &SourceInfo::default(), &s, &RenderRequest { depth, ..RenderRequest::exact(400, 267) });
+        assert_eq!((r.image.width, r.image.height), (400, 267), "{depth:?}");
+        if let Some(d) = &r.deep {
+            assert_eq!((d.width, d.height), (400, 267), "{depth:?} deep");
+        }
+    }
+}
+
 #[test]
 fn crop_and_straighten_output_size() {
     let mut s = DevelopSettings::default();

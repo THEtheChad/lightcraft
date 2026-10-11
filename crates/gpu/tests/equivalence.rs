@@ -719,6 +719,21 @@ fn saturated(s: &mut DevelopSettings) {
 }
 
 #[test]
+fn exact_sizes_match() {
+    if !gpu() {
+        return;
+    }
+    // an export's resolved size from a proxy whose aspect rounds differently (512×341 of 3:2)
+    let src = scene(0, 512, 341);
+    let mut s = DevelopSettings::default();
+    typical(&mut s);
+    let req = RenderRequest::exact(400, 267);
+    check("exact 400×267", &src, &SourceInfo { raw: true, ..Default::default() }, &s, &req);
+    let g = lightcraft_gpu::render(&src, &SourceInfo::default(), &s, &req, None).expect("gpu").image;
+    assert_eq!((g.width, g.height), (400, 267));
+}
+
+#[test]
 fn output_spaces_match() {
     if !gpu() {
         return;

@@ -45,6 +45,8 @@
 - Upgrading from a Windows installer older than 0.6 (such as 0.5.0) keeps LightCraft in the folder it was installed
   in, instead of moving it back to Program Files (issue #399). If that folder has been deleted since, the upgrade
   installs to Program Files.
+- Exports come out at exactly the size you ask for. A long edge of 800 px on a 6000 × 4000 photo used to give
+  799 × 533 instead of 800 × 533, and small sizes could lose more (a 5 × 3 picture at long edge 4 came out 3 × 2).
 
 ## 2026-10-10
 

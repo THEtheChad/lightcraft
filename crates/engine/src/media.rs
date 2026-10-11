@@ -1412,16 +1412,17 @@ impl crate::Session {
     }
 
     /// Synchronous render for export: like [`Self::render_now`], into colour space `space` with
-    /// sample format `depth`.
+    /// sample format `depth`, sized by `max_w × max_h` as `sizing` says.
     pub fn render_export(
         &mut self,
         id: PhotoId,
         max_w: usize,
         max_h: usize,
+        sizing: lightcraft_pipeline::Sizing,
         space: lightcraft_pipeline::OutputSpace,
         depth: lightcraft_pipeline::OutputDepth,
     ) -> Result<Rendered, String> {
-        let r = self.export_job(id, max_w, max_h, space, depth)?.run();
+        let r = self.export_job(id, max_w, max_h, sizing, space, depth)?.run();
         self.accept(&r);
         r.rendered
     }
@@ -1432,6 +1433,7 @@ impl crate::Session {
         id: PhotoId,
         max_w: usize,
         max_h: usize,
+        sizing: lightcraft_pipeline::Sizing,
         space: lightcraft_pipeline::OutputSpace,
         depth: lightcraft_pipeline::OutputDepth,
     ) -> Result<RenderJob, String> {
@@ -1445,9 +1447,12 @@ impl crate::Session {
                 *denoise = Some(wanted);
             }
         }
+        job.request.sizing = sizing;
         job.request.space = space;
         job.request.depth = depth;
-        job.key ^= (space as u64 + 1).wrapping_mul(0xa076_1d64_78bd_642f) ^ (depth as u64 + 1).wrapping_mul(0xe703_7ed1_a0b4_28db);
+        job.key ^= (space as u64 + 1).wrapping_mul(0xa076_1d64_78bd_642f)
+            ^ (depth as u64 + 1).wrapping_mul(0xe703_7ed1_a0b4_28db)
+            ^ (sizing as u64).wrapping_mul(0x8ebc_6af0_9c88_c6e3);
         Ok(job)
     }
 

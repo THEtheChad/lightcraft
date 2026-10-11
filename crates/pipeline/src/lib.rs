@@ -119,11 +119,23 @@ pub enum Quality {
     Full,
 }
 
+/// How a [`RenderRequest`]'s `max_w × max_h` sizes the output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Sizing {
+    /// Fit inside the box, aspect preserved (views, thumbnails, contact sheet cells).
+    #[default]
+    Fit,
+    /// Exactly `max_w × max_h`: a size already resolved from the photo's frame (an export's size
+    /// options), not fitted again. See [`geometry::Frame::sized`].
+    Exact,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RenderRequest {
-    /// Output must fit in `max_w × max_h` (aspect preserved).
+    /// The output's size: the box it fits in (aspect preserved), or exactly this ([`Sizing`]).
     pub max_w: usize,
     pub max_h: usize,
+    pub sizing: Sizing,
     pub quality: Quality,
     /// Show the crop frame's content only (true) or the whole uncropped image (crop tool active).
     pub apply_crop: bool,
@@ -170,6 +182,7 @@ impl RenderRequest {
         Self {
             max_w,
             max_h,
+            sizing: Sizing::Fit,
             quality: Quality::Full,
             apply_crop: true,
             overlay: Overlay::None,
@@ -179,6 +192,11 @@ impl RenderRequest {
             window: None,
             display: None,
         }
+    }
+
+    /// A render of exactly `w × h` (see [`Sizing::Exact`]).
+    pub fn exact(w: usize, h: usize) -> Self {
+        Self { sizing: Sizing::Exact, ..Self::fit(w, h) }
     }
 }
 
@@ -212,9 +230,10 @@ pub(crate) struct Prepared {
     pub px_per_long: f64,
 }
 
-/// Output size for a source of `src_w × src_h` under `s`, fitting `max_w × max_h`.
+/// Output size for a source of `src_w × src_h` under `s`, fitting `max_w × max_h` (or that exactly, per
+/// [`RenderRequest::sizing`]).
 pub fn output_size(src_w: usize, src_h: usize, s: &DevelopSettings, req: &RenderRequest) -> (usize, usize) {
-    geometry::Frame::new(src_w, src_h, s, req.apply_crop).fit(req.max_w, req.max_h)
+    geometry::Frame::new(src_w, src_h, s, req.apply_crop).sized(req.max_w, req.max_h, req.sizing)
 }
 
 /// Size of the cropped output of a `src_w × src_h` source under `s` at the source's own resolution
@@ -400,7 +419,7 @@ pub fn plan<'a>(src: &Rgb32f, info: &SourceInfo, s: &'a DevelopSettings, req: &R
     }
     let s = &*settings;
     let frame = frame_for(src, info, s, req.apply_crop);
-    let (full_w, full_h) = frame.fit(req.max_w, req.max_h);
+    let (full_w, full_h) = frame.sized(req.max_w, req.max_h, req.sizing);
     // sizes and scale are those of the whole output; a window only narrows what is drawn
     let px_per_long = frame.px_per_long(full_w);
     let mut fixed_air = None;

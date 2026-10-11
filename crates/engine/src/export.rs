@@ -7,6 +7,7 @@
 use lightcraft_codecs::{ChromaSubsampling, EncodeImage, EncodeMeta, JxlColour, JxlOptions, NamedSpace, Samples, encode, icc};
 pub use lightcraft_codecs::{JxlEffort, TiffCompression};
 use lightcraft_meta::{DateTime, Gps, Metadata};
+use lightcraft_pipeline::Sizing;
 pub use lightcraft_pipeline::{DeepImage, DeepSamples, OutputDepth, OutputSpace};
 use lightcraft_raster::Rgba8;
 use serde::{Deserialize, Serialize};
@@ -1626,9 +1627,10 @@ fn prepare_guarded(
         let (w, h) = output_size(p, o);
         let meta = export_metadata(p, &session.catalog, o);
         let gain_map = o.hdr_output() && o.format == ExportFormat::Jpeg;
-        let job = session.export_job(id, w, h, o.effective_space(), o.effective_depth())?;
+        // (already the output's size: rendered as it is, not fitted again)
+        let job = session.export_job(id, w, h, Sizing::Exact, o.effective_space(), o.effective_depth())?;
         let weight = render_weight(full_px, long, job.level, w.saturating_mul(h));
-        let hdr_job = if gain_map { Some(session.export_job(id, w, h, o.effective_space(), OutputDepth::F32Hdr)?) } else { None };
+        let hdr_job = if gain_map { Some(session.export_job(id, w, h, Sizing::Exact, o.effective_space(), OutputDepth::F32Hdr)?) } else { None };
         (Work::Render(Box::new(RenderWork { job, hdr_job, meta, opts: o.clone() })), weight)
     } else {
         let lightcraft_catalog::Source::File { path } = &p.source else {

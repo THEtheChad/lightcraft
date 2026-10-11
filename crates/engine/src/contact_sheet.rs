@@ -1,7 +1,7 @@
 //! Paginated contact sheets, rendered with the normal export pipeline and packaged as PDF.
 use crate::export::{Anchor, ExportFormat, ExportOptions, Watermark, draw_watermark, encode_image};
 use crate::{Session, media::RenderJob};
-use lightcraft_pipeline::{OutputDepth, OutputSpace};
+use lightcraft_pipeline::{OutputDepth, OutputSpace, Sizing};
 use lightcraft_raster::Rgba8;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -93,7 +93,7 @@ pub fn prepare(session: &mut Session, p: &Value) -> Result<Prepared, String> {
     let mut items = Vec::with_capacity(ids.len());
     for id in ids {
         let name = session.catalog.photo(id).ok_or("no such photo")?.file_name.clone();
-        let job = session.export_job(id, l.cell_w - 16, l.cell_h - 48, OutputSpace::Srgb, OutputDepth::U8)?;
+        let job = session.export_job(id, l.cell_w - 16, l.cell_h - 48, Sizing::Fit, OutputSpace::Srgb, OutputDepth::U8)?;
         items.push((name, job));
     }
     Ok(Prepared { options, items })
