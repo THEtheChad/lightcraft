@@ -4,10 +4,19 @@
 //! **Each test app's caches** (the session's [`MediaCache`](lightcraft_engine::media::MediaCache)
 //! and the renderer's stage caches) are sized for its test's share of the machine, not for the
 //! whole machine as an app's are: libtest runs several tests at once in one process, and each
-//! took the full share, so the run held that many times over. [`LightcraftApp::new`] calls
-//! [`cap_instance`]: the app takes what it would on a machine with
-//! [`lightcraft_testkit::memory::per_test_bytes`] of RAM (issue #3066). The process-wide budget,
-//! the decode, export and GPU gates and the demo scene cache stay as they are.
+//! would take the full share. [`LightcraftApp::new`] calls [`cap_instance`]: the app takes what it
+//! would on a machine with [`lightcraft_testkit::memory::per_test_bytes`] of RAM, never more than
+//! [`memory::default_budget`] (issue #3066). Both are read once per test process, at the first
+//! app, so a test that changes the process-wide budget meanwhile doesn't change the caps of the
+//! apps other tests build. The process-wide budget, the decode, export and GPU gates and the demo
+//! scene cache stay as they are.
+//!
+//! What it bounds is the most those two caches may hold per test app, so a run with many tests at
+//! once (or little memory free) can't hold a whole machine's share per test. It doesn't bound a
+//! test's working memory. At 4 tests at once it changed neither the peak nor the time of the
+//! `ui-egui` lib tests on a 16-core, 21.5 GiB machine: the caches rarely fill (median 40 MB held
+//! of 526 MiB), and the peaks are short spikes of working memory. The share depends on the memory
+//! free when the run starts; every test passes at the floor (256 MiB).
 //!
 //! **Changing the process-wide budget.** It is one number for the whole test process: the decode,
 //! export and GPU gates, the caches of sessions made outside a test app and the demo scene cache
@@ -42,20 +51,47 @@ pub(crate) fn cap_instance(mut app: LightcraftApp) -> LightcraftApp {
     app
 }
 
-/// The memory budget a test app sizes its own caches from: [`budget_for_share`] of this test's
-/// share of the machine, read once per test process so that every test in a run gets the same.
+thread_local! {
+    /// A budget the apps built on this thread take instead of [`baseline`] ([`InstanceBudget`]).
+    static INSTANCE_OVERRIDE: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// The memory budget a test app sizes its own caches from: the [`baseline`], unless a test on
+/// this thread set its own with [`InstanceBudget`].
 pub(crate) fn instance_budget() -> usize {
-    static PER_TEST: OnceLock<u64> = OnceLock::new();
-    let per_test = *PER_TEST.get_or_init(lightcraft_testkit::memory::per_test_bytes);
-    budget_for_share(per_test, memory::budget())
+    INSTANCE_OVERRIDE.with(std::cell::Cell::get).unwrap_or_else(baseline)
+}
+
+/// [`budget_for_share`] of this test's share of the machine and [`memory::default_budget`] (which
+/// honours `LIGHTCRAFT_MEMORY_MB`), taken once per test process: not the process-wide budget at
+/// the time, which a test changing it may have set to anything for a few frames.
+fn baseline() -> usize {
+    static BASELINE: OnceLock<usize> = OnceLock::new();
+    *BASELINE.get_or_init(|| budget_for_share(lightcraft_testkit::memory::per_test_bytes(), memory::default_budget()))
 }
 
 /// What [`memory::default_budget`] gives a machine with `per_test` bytes of RAM (a quarter, from
-/// 256 MiB to 1.5 GiB), and never more than the process-wide budget `process`, so a lower
-/// `LIGHTCRAFT_MEMORY_MB` still wins.
+/// 256 MiB to 1.5 GiB), and never more than `process`, so a lower `LIGHTCRAFT_MEMORY_MB` still
+/// wins.
 fn budget_for_share(per_test: u64, process: usize) -> usize {
     let quarter = usize::try_from(per_test / 4).unwrap_or(usize::MAX);
     quarter.clamp(MIN_INSTANCE_BUDGET, MAX_INSTANCE_BUDGET).min(process)
+}
+
+/// While held, the apps built on this thread size their caches from the given budget instead of
+/// the [`baseline`]: a test that needs a known cap, whatever the machine. Dropping it goes back.
+pub(crate) struct InstanceBudget(Option<usize>);
+
+impl InstanceBudget {
+    pub(crate) fn set(bytes: usize) -> InstanceBudget {
+        InstanceBudget(INSTANCE_OVERRIDE.with(|o| o.replace(Some(bytes))))
+    }
+}
+
+impl Drop for InstanceBudget {
+    fn drop(&mut self) {
+        INSTANCE_OVERRIDE.with(|o| o.set(self.0));
+    }
 }
 
 /// Taken by every test that changes the process-wide budget.
@@ -100,7 +136,7 @@ mod tests {
     const GIB: u64 = 1 << 30;
 
     // A test app takes what an app would on a machine with its test's share of memory: a quarter,
-    // in the app's range, never more than the process-wide budget (issue #3066)
+    // in the app's range, never more than the process's own budget (issue #3066)
     #[test]
     fn a_test_apps_budget_is_a_quarter_of_its_share() {
         let process = 3 << 29;
@@ -111,22 +147,49 @@ mod tests {
         assert_eq!(budget_for_share(0, process), MIN_INSTANCE_BUDGET, "never below the app's least");
         assert_eq!(budget_for_share(u64::MAX, process), MAX_INSTANCE_BUDGET, "never above the app's most");
         assert_eq!(budget_for_share(4 * GIB, 384 << 20), 384 << 20, "a lower LIGHTCRAFT_MEMORY_MB wins");
-        assert_eq!(budget_for_share(4 * GIB, 8 << 30), 1 << 30, "a higher one doesn't");
+        // (usize: 2 GiB still fits on 32-bit targets)
+        assert_eq!(budget_for_share(4 * GIB, 2usize << 30), 1 << 30, "a higher one doesn't");
+        assert_eq!(budget_for_share(4 * GIB, usize::MAX), 1 << 30);
     }
 
-    // Given a test app, its session's caches and its renderer's stage caches take its test's
-    // share, not the whole machine's (issue #3066)
+    fn app() -> crate::headless::Headless {
+        crate::headless::Headless::new(LightcraftApp::new(lightcraft_engine::Session::with_demo(), Default::default()), [800.0, 600.0], 1.0)
+    }
+
+    /// The caps `h`'s app was built with: its session's cache budget and its renderer's stage budget.
+    fn caps(h: &crate::headless::Headless) -> (usize, usize) {
+        (h.app.session.media.budget(), h.app.renderer.stage_budget())
+    }
+
+    /// The caps an app built with `budget` has.
+    fn caps_of(budget: usize) -> (usize, usize) {
+        (memory::cache_share(budget), budget / crate::render::STAGE_BUDGET_SHARE)
+    }
+
+    // Given a test's share below the process-wide budget, a test app's session caches and its
+    // renderer's stage caches take that share, not the whole machine's (issue #3066)
     #[test]
     fn a_test_app_is_sized_for_its_tests_share() {
-        // the process-wide budget, which the cap never exceeds, holds still meanwhile
-        let _turn = BudgetGuard::hold();
-        let h = crate::headless::Headless::new(LightcraftApp::new(lightcraft_engine::Session::with_demo(), Default::default()), [800.0, 600.0], 1.0);
-        let budget = instance_budget();
-        // e.g. 16 GiB available and 4 tests at once: 1 GiB, not the 1.5 GiB an app takes
-        assert!(budget <= memory::budget());
-        assert_eq!(h.app.session.media.budget(), memory::cache_share(budget));
-        assert_eq!(h.app.renderer.stage_budget(), budget / crate::render::STAGE_BUDGET_SHARE);
-        assert_eq!(h.app.renderer.memory()["stageCaches"]["budgetBytes"], budget / crate::render::STAGE_BUDGET_SHARE, "and reports it");
+        // a share no machine gives and no budget derives: 1 GiB less 4 MiB
+        let share = (1 << 30) - (4 << 20);
+        let _share = InstanceBudget::set(share);
+        let h = app();
+        assert_eq!(caps(&h), caps_of(share));
+        assert_eq!(h.app.renderer.memory()["stageCaches"]["budgetBytes"], share / crate::render::STAGE_BUDGET_SHARE, "and reports it");
+    }
+
+    // Given a test that has the process-wide budget at an odd value for a few frames, an app
+    // another test builds meanwhile still takes the baseline, and keeps it after (issue #3066)
+    #[test]
+    fn an_app_built_while_the_budget_is_changed_takes_the_baseline() {
+        let h = {
+            let _turn = BudgetGuard::hold();
+            memory::set_budget(97 << 20);
+            app()
+        };
+        assert_eq!(caps(&h), caps_of(baseline()));
+        assert_ne!(caps(&h), caps_of(97 << 20));
+        assert!(baseline() >= MIN_INSTANCE_BUDGET.min(memory::default_budget()));
     }
 
     // The budget is put back as it was found, not to the default, also when the test fails
