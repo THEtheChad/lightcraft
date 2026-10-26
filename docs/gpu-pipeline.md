@@ -266,15 +266,16 @@ bit-identical, and one (the point colour range overlay) has max 2 LSB on 0.0002%
 mean 0.0003 LSB. That is the same picture as on Metal, inside the bounds
 (`cargo test -p lightcraft-gpu --release --test it equivalence:: -- --nocapture`).
 
-**In CI** (`.github/workflows/ci.yml`, issue #1050) they run on every platform: on Metal on the macOS
-runners, and on software adapters on Linux (Mesa lavapipe) and Windows (WARP, DX12 with FXC), which
-`LIGHTCRAFT_GPU_ALLOW_SOFTWARE=1` admits (tests only: the app never sets it). The step fails if they
-skip. Measured on lavapipe (CI and locally) and WARP: all 134 compared renders within **max 1 LSB,
-mean ≤ 0.0003 LSB**, as on the M4 Pro; on the macOS runner's (paravirtual) Metal device one case reaches
-2 LSB (point colour range overlay, 0.0002% of pixels over 1), the rest max 1. The suite takes about
-50 s on lavapipe, 30 s on the macOS runner and 2–7.5 min on WARP. lavapipe's
-storage bindings stop at 128 MiB (the WebGPU default), so the two big-source tests use a 117 MiB
-source: above what a view keeps with its stages (96 MiB) and small enough to be uploaded there.
+**In CI** (`.github/workflows/ci.yml`, issue #1050) they run on every pull request and push to `main` on
+all three desktop platforms: after `cargo xtask ci`, each leg of the gate runs `lightcraft-gpu`'s tests
+again with `LIGHTCRAFT_GPU_ALLOW_SOFTWARE=1` (tests only: the app never sets it), so they use Mesa's
+lavapipe on Linux, WARP (DX12 with FXC) on Windows and the runner's Metal device on macOS, every case
+held to the bounds above. The step fails if one skips for lack of an adapter (the device-loss test
+still skips where a device can't be lost on purpose). On the first green run (2026-10-26) the
+equivalence binary took 50 s on lavapipe, 15 s on the macOS runner and 9.3 min on WARP. Measured
+2026-10-11 on lavapipe and WARP, every compared render stayed within max 1 LSB, mean ≤ 0.0003 LSB.
+lavapipe's storage bindings stop at 128 MiB (the WebGPU default), so the two big-source tests use a
+117 MiB source: above what a view keeps with its stages (96 MiB) and small enough to be uploaded there.
 
 Remaining differences come from f32 vs f64 coordinate math, fast-math transcendental functions on
 Metal and summation order in the box filters — all far below one 8-bit step.

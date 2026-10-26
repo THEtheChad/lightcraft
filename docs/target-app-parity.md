@@ -1,6 +1,6 @@
 # Target-app parity: LightCraft vs Adobe Lightroom
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-19 · **Change:** minor (Minolta MRW decoded, 6 bodies verified; RAW: 83% of Adobe's models decode, 38% verified after the camera-coverage sweep #1327; Platforms: the Windows x64 installer verified on Windows 11) · **Target:** Adobe Lightroom Classic 15.5 (August 2026) and Lightroom 9.6 (desktop)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-26 · **Change:** minor (gap 9 closed: tests in CI on macOS, Windows and Linux x64, GPU tests on lavapipe, Metal and WARP; Minolta MRW decoded, 6 bodies verified; RAW: 83% of Adobe's models decode, 38% verified after the camera-coverage sweep #1327; Platforms: the Windows x64 installer verified on Windows 11) · **Target:** Adobe Lightroom Classic 15.5 (August 2026) and Lightroom 9.6 (desktop)
 
 The authoritative assessment of how close LightCraft is to Lightroom. The row-by-row checklist is
 [parity-checklist.md](parity-checklist.md); the ranked work list is [gaps.md](gaps.md); deep areas
@@ -53,7 +53,7 @@ phase #85, duplicate Local entries #22, black GPU exports on an Intel iGPU #78).
 | Hardware | ~50% | ~40% | 40–80 h (+ tethering and printing, counted under Classic modules) | [hardware-parity.md](hardware-parity.md) |
 | Localization (12 key languages) | 8 of 12 present | ~64% (mean of the 12, measured) | 130–210 h for the target's set; +135–239 h for Hindi, Arabic, Vietnamese, Korean | [localization-parity.md](localization-parity.md) |
 | Performance | ~80% | ~70% | 30–50 h | 24 MP GPU slider 3.9 ms, export 0.3 s (measured, [gpu-pipeline.md](gpu-pipeline.md)); 85k library opens in 1.7–4.7 s; 100k test pending |
-| Stability | — | ~60% | 30–60 h | never-crash lints and guards workspace-wide, crash-tested journal, 2,561 tests; but CI runs tests only on FreeBSD, user reports keep finding bugs in ✅ areas |
+| Stability | — | ~60% | 30–60 h | never-crash lints and guards workspace-wide, crash-tested journal, 2,561 tests, run in CI on macOS, Windows and Linux x64 for every pull request (GPU tests on lavapipe, Metal and WARP) and on FreeBSD nightly; but user reports keep finding bugs in ✅ areas |
 | Platforms | macOS, Windows (x64 / x86 / ARM64), Linux (AppImage, deb, rpm, Flatpak, Nix), FreeBSD, web | ~60% | 25–45 h | macOS is where it is tested; the Windows x64 installer is verified on Windows 11 (0.9.1) except for a confirmation after uninstalling from Settings → Apps (#892); web experimental (CPU only) |
 | Ecosystem / plug-ins | ~25% | ~15% | 40–80 h + owner decision | no Lightroom SDK equivalent (export, publish, metadata plug-ins); beyond the target: JSON-lines control channel, MCP server with 28 tools + one per command, CLI |
 | AI features | ~30% | ~20% | 120–220 h + model decisions | [AI](#ai) (overlaps the masking and Enhance rows; not added twice) |
@@ -158,7 +158,7 @@ essentials replaces its guessed 45% raw look with 84% × 0.75 (+1 point).
 | Discount | Mainstream | Essentials | Evidence |
 |---|---:|---:|---|
 | Interaction fidelity / UI clarity | ×0.95 | ×0.95 | brush live preview gaps and feathering (#517, #518); crop artefacts and limits (#731, #742, #770, #771); Compare white-balance selector (#743–#745); low-res slider previews (#330); dialogs taller than the window (#781); mouse-wheel scroll (#714) |
-| Stability on real machines | ×0.92 | ×0.92 | launch and quit crashes or silent startup failures (#250 macOS 12 Intel, #315 Windows Intel GPU, #431 Intel Mac, #260, #462, #783 Linux / Nouveau, #790 Windows installer, fixed in 0.9.1); tests run in CI on Linux x64 and FreeBSD only (gap 9) |
+| Stability on real machines | ×0.92 | ×0.92 | launch and quit crashes or silent startup failures (#250 macOS 12 Intel, #315 Windows Intel GPU, #431 Intel Mac, #260, #462, #783 Linux / Nouveau, #790 Windows installer, fixed in 0.9.1); tests in CI on macOS, Windows, Linux x64 and FreeBSD since gap 9 closed (2026-10-26), discount unchanged |
 | File exchange with Lightroom users (mainstream) / opening files people send (essentials) | ×0.92 | ×0.95 | Adobe XMP sidecars change colours (#290), XMP CameraProfile and Upright ignored (#204, #205), catalog import fails (#599), same Light values render differently (#523, #209), no write-back to `.lrcat`; for casual users: CR3 beyond verified bodies, compressed ORF, HE NEF open as previews (#473, #485, #556), HEIC trouble (#693) |
 | **Product** | **×0.804** | **×0.830** | |
 
@@ -238,11 +238,11 @@ work end to end on macOS; see the table in [roadmap.md](roadmap.md#alpha-gate). 
 variants, compressed ORF, HE NEF as previews) degrade but don't block a workflow.
 
 **To beta:** ~14 points of readiness, **~340–600 h**: the `B` gaps in [gaps.md](gaps.md)
-(~230–430 h), plus burning down the ~92 open core-path user issues (40–80 h) and stability work
+(~225–420 h), plus burning down the ~92 open core-path user issues (40–80 h) and stability work
 around them. Beta needs: CR3, ORF and
 HE NEF decoding from sensor data; measured colour for the popular models and a fidelity suite with
 scores; Subject / Sky / People masks; a lens profile database for the
-popular lenses; tests in CI on macOS, Windows and Linux.
+popular lenses.
 
 ## How hours are calibrated
 
@@ -300,6 +300,7 @@ P2 items 12–25 h; look tuning, performance, packaging, hardening 25–45 h.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | Gap 9 closed (#1148): CI runs `cargo xtask ci` on macOS, Windows and Linux x64 and the GPU tests on lavapipe, Metal and WARP; Stability notes updated, beta needs no longer list CI, B gaps ~230–430 h → ~225–420 h; readiness percentages unchanged |
 | 2026-10-19 | patch | Stability note: tests run in CI on Linux x64 (every PR) as well as FreeBSD; macOS and Windows remain (gap 9) |
 | 2026-10-19 | minor | Localization ~55% → ~64% (mean of the 12 key languages): Indonesian (`id`) catalog, every message but What's New; full target 61.2% → 61.5% (still ~61%) |
 | 2026-10-19 | patch | Platforms: the Windows installer is no longer listed as unverified (the 0.9.1 x64 MSI is tested on Windows 11; a confirmation after uninstalling from Settings → Apps, #892, remains); #790 noted as fixed in 0.9.1; percentages and hours unchanged |

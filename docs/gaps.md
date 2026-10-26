@@ -1,6 +1,6 @@
 # Gaps: where LightCraft falls short of Lightroom
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-24 · **Change:** minor (gap 30: the Info panel shows the selected photos' shared metadata and marks mixed fields; gap 28: ⌘⌥⇧C / ⌘⌥⇧V copy and paste metadata; gap 13: before a Lightroom catalog import the app asks merge or new library, #2672; gap 28: F8 shows / hides the right panel; import review album hierarchy, #2362; gap 20: Minolta MRW decodes; gap 10: 551 models verified; gap 15: Print Page Options — page numbers, page info, crop marks; gap 28: `\` shows / hides the Filter Bar in the grids; gap 21: Indonesian interface shipped, every message but What's New; gap 27: the Windows x64 installer verified on Windows 11; the Settings → Apps uninstall confirmation remains; gap 28: ⌘L Enable Filters switches the filter off and on; gap 15: Japanese photo and postcard paper sizes in the Print page setup and PDF)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-26 · **Change:** minor (gap 9 closed: the CI gate runs `cargo xtask ci` on macOS and Windows as well as Linux x64, and the GPU tests on lavapipe, Metal and WARP, #1148; gap 30: the Info panel shows the selected photos' shared metadata and marks mixed fields; gap 28: ⌘⌥⇧C / ⌘⌥⇧V copy and paste metadata; gap 13: before a Lightroom catalog import the app asks merge or new library, #2672; gap 28: F8 shows / hides the right panel; import review album hierarchy, #2362; gap 20: Minolta MRW decodes; gap 10: 551 models verified; gap 15: Print Page Options — page numbers, page info, crop marks; gap 28: `\` shows / hides the Filter Bar in the grids; gap 21: Indonesian interface shipped, every message but What's New; gap 27: the Windows x64 installer verified on Windows 11; the Settings → Apps uninstall confirmation remains; gap 28: ⌘L Enable Filters switches the filter off and on; gap 15: Japanese photo and postcard paper sizes in the Print page setup and PDF)
 
 Every known shortfall, one entry each, ranked by user impact (how many Lightroom users hit it, and
 how hard it blocks them), then by effort. **Agents pick work from the top** (the first entry nobody is
@@ -23,7 +23,7 @@ Hours are Opus 5.5 agent wall-clock hours (see [target-app-parity.md](target-app
 | 6 B | **Compressed ORF** (every Olympus / OM body since ~2008) | measured: 66 of 78 Olympus / OM models preview-only; `orf.rs` refuses; OM bucket 3% of photographers, 3% of them fully work | +2.6 points; best gain per hour of any raw gap (~0.2) | 8–15 | [raw-parity](raw-parity.md#compressed-orf-a-clean-room-starting-point) (the two Olympus patents that describe the method) |
 | 7 | **Nikon High Efficiency NEF** (HE / HE★ on Z 8, Z 9, Z 6III, Z f, Z50II, Z5II when set to HE) | named and preview only (#193); needs a pure-Rust JPEG XS decoder | +1.1 points (only shots taken in HE; lossless works on the same bodies); low gain per hour (~0.04), so not a beta blocker | 20–40 | [raw-parity](raw-parity.md) |
 | 8 B | **No lens profile database** (LR-EDIT-OPTICS-PROFILE): only DNG opcodes, RW2 in-file distortion, Sony ILCE-7RM4A, full-frame ILCE-7CR distortion (Auto only) and ILCE-7RM6 distortion (`docs/sony-ilce7rm6-lens-corrections.md`) and Nikon Z 6II / Z 8 / Z f distortion (`docs/nikon-lens-corrections.md`) | Adobe ships 3,635 lens profiles; we never use them | distortion / vignetting correction is a default step for many | 40–80 + calibration shots | [raw-parity](raw-parity.md#lens-profiles) |
-| 9 B | **Tests don't run in CI on macOS or Windows**: Linux x64 runs `cargo xtask ci` on every PR and push to main (`.github/workflows/ci.yml`) and FreeBSD runs `cargo test`; the others build packages | `.github/workflows/` (ci, freebsd, packaging-lint, release, windows-arm64); the linux-riscv64 release job added in 0.6.0 (#844) runs only `lightcraft-cli --version` under QEMU; macOS / Windows jobs: #1148 | regressions in `cfg(target_os)` code reach macOS and Windows users | 6–12 | [target-app-parity](target-app-parity.md#by-dimension) |
+| 9 | ~~Tests don't run in CI on macOS or Windows~~: closed 2026-10-26, see Closed recently | `.github/workflows/ci.yml` | — | 0 | [target-app-parity](target-app-parity.md#by-dimension) |
 | 10 B | **Per-model verification thin, plus cheap per-body decode fixes**: 551 of 1,446 Adobe models verified (38%), ~85% of photographers on a verified body; Nikon 5 bodies verified, Canon 34, Leica 14 (the Q3 by a recorded check of 38 private DNGs). Cheap fixes: Z 6II packed 14-bit NEF (#769, PR #671), Sony A100 regression (#702); F828 SRF now discovered and imported as preview-only, sensor decoding still missing, DSLR-A200…A390 / A850 12-bit ARW (#535) | measured: [raw/coverage.tsv](raw/coverage.tsv) | per-body bugs (levels, crops, WB) surface only from users | 25–45 | [raw-parity](raw-parity.md#by-maker-measured) |
 | 11 | **Enhance: Raw Details, Super Resolution; AI denoise without shippable weights or X-Trans** | ENH rows 0%; denoise Bayer only, RawNIND weights GPL and opt-in | Fujifilm users get no AI denoise; nobody gets it out of the box | 30–60 + model decision | [raw-parity](raw-parity.md#demosaic-levels-crops-and-lens-metadata) |
 | 12 | **Content-aware / generative remove, detect distractions, reflections removal** | REM rows 75%; patch synthesis missing | cleanup work goes back to Photoshop | 25–45 (+ generative model) | [target-app-parity](target-app-parity.md#ai) |
@@ -46,7 +46,7 @@ Hours are Opus 5.5 agent wall-clock hours (see [target-app-parity.md](target-app
 | 28 | **Small Classic shortcuts and keys**: Tab / ⇧Tab (hide the side panels / all panels; Tab moves the keyboard focus here) and F5. Rating `[` `]`, flag cycling (`` ` ``), `\` (Filter Bar), ⌘L (Enable Filters), ⌘⌥⇧C / ⌘⌥⇧V (Copy / Paste Metadata), F1 help, F6 / F7 / F8 (filmstrip, left panel, right panel) are bound; the grid-cycle key is shown beside both grid rows in View (#2500) | [ui-parity](ui-parity.md#shortcuts) | Classic muscle memory | 2–4 | [ui-parity](ui-parity.md) |
 | 30 | **Multi-select metadata editing in the UI**: `photo.setMeta` already iterates all selected photos, so the engine applies changes to every target. The Info panel's Show Metadata For choice (Target Photo / Selected Photos) shows the values the selected photos share and marks each field where they differ as Mixed; the All Metadata dialog still shows one photo's values with no "mixed" indication | standard in Lightroom Classic's multi-select Info panel | anyone editing metadata on a batch (copyright, keywords, custom fields) | 1–3 | [ui-parity](ui-parity.md) |
 
-Beta-blocking gaps (B) total **~230–430 h**; with the stability and platform work they need around them,
+Beta-blocking gaps (B) total **~225–420 h**; with the stability and platform work they need around them,
 **~340–600 h** to beta (incl. 40–80 h for the ~92 open core-path user issues) (see [target-app-parity.md](target-app-parity.md#stage)).
 
 ## Gaps by kind
@@ -60,6 +60,13 @@ Beta-blocking gaps (B) total **~230–430 h**; with the stability and platform w
 - **Stability and platforms:** 9, 26, 27
 
 ## Closed recently (kept for calibration)
+
+- 2026-10-26: tests in CI on macOS and Windows (gap 9, #1050, #1148): the CI gate runs `cargo xtask ci` on
+  macos-latest and windows-latest as well as ubuntu-24.04 for every pull request and push to `main`, then the GPU tests
+  again with `LIGHTCRAFT_GPU_ALLOW_SOFTWARE=1` (Mesa lavapipe on Linux, Metal on macOS, WARP on Windows), failing if
+  they skip for lack of an adapter. The first runs found two platform-only clippy errors, and on Windows the control
+  port's reset (#2723), two test paths (#2547) and a hard link to an original that the write guard missed (#3020). Whether the new legs are required checks is a repository setting; the linux-riscv64 release
+  job still runs only `lightcraft-cli --version`.
 
 - 2026-10-22: saving XMP preserves foreign namespaces even when they use `lc:` or `xmp:` prefixes; importing them no longer interprets their properties as native settings or ratings. Parser, merge and save-command regressions cover the correction; no ranked gap or readiness estimate changes.
 
@@ -84,6 +91,7 @@ Beta-blocking gaps (B) total **~230–430 h**; with the stability and platform w
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | Gap 9 closed: the CI gate runs `cargo xtask ci` on macOS and Windows as well as Linux x64, and the GPU tests on lavapipe, Metal and WARP (#1148); added to Closed recently; B gaps ~230–430 h → ~225–420 h |
 | 2026-10-24 | minor | Gap 28: ⌘⌥⇧C / ⌘⌥⇧V (Ctrl+Alt+Shift+C / V on Windows and Linux) copy and paste metadata; no key leaves the entry; hours unchanged |
 | 2026-10-24 | minor | Gap 30 shrinks: the Info panel's Show Metadata For (Target Photo / Selected Photos, `view.infoSelectedPhotos`) shows the selected photos' shared values and marks fields that differ as Mixed; the All Metadata dialog remains; 1–3 h (was 4–8) |
 | 2026-10-23 | minor | Gap 13: before a Lightroom catalog import the app asks whether it merges into the open library or goes into a new one (opt-out in Settings, #2672); hours unchanged |
