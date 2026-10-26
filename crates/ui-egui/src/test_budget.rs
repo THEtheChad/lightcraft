@@ -80,11 +80,12 @@ fn budget_for_share(per_test: u64, process: usize) -> usize {
 
 /// While held, the apps built on this thread size their caches from the given budget instead of
 /// the [`baseline`]: a test that needs a known cap, whatever the machine. Dropping it goes back.
-pub(crate) struct InstanceBudget(Option<usize>);
+/// Not `Send`: dropped on another thread, it would put back that thread's override, not this one's.
+pub(crate) struct InstanceBudget(Option<usize>, std::marker::PhantomData<std::rc::Rc<()>>);
 
 impl InstanceBudget {
     pub(crate) fn set(bytes: usize) -> InstanceBudget {
-        InstanceBudget(INSTANCE_OVERRIDE.with(|o| o.replace(Some(bytes))))
+        InstanceBudget(INSTANCE_OVERRIDE.with(|o| o.replace(Some(bytes))), std::marker::PhantomData)
     }
 }
 
@@ -182,13 +183,15 @@ mod tests {
     // another test builds meanwhile still takes the baseline, and keeps it after (issue #3066)
     #[test]
     fn an_app_built_while_the_budget_is_changed_takes_the_baseline() {
+        // never the baseline, whatever LIGHTCRAFT_MEMORY_MB says (and above set_budget's 64 MiB least)
+        let odd = baseline() + (7 << 20);
         let h = {
             let _turn = BudgetGuard::hold();
-            memory::set_budget(97 << 20);
+            assert_eq!(memory::set_budget(odd), odd);
             app()
         };
         assert_eq!(caps(&h), caps_of(baseline()));
-        assert_ne!(caps(&h), caps_of(97 << 20));
+        assert_ne!(caps(&h), caps_of(odd));
         assert!(baseline() >= MIN_INSTANCE_BUDGET.min(memory::default_budget()));
     }
 
