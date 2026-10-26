@@ -3877,6 +3877,7 @@ version = "0.15.0"
 dependencies = [
  "jpeg-encoder",
  "lightcraft-raster",
+ "lightcraft-testkit",
  "log",
  "siphasher",
  "zune-core",
