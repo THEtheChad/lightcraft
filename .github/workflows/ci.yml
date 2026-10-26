@@ -1,7 +1,16 @@
 name: CI
 
 # Quality gates for every push to main and every pull request (`cargo xtask ci`), through the
-# suite's shared gate workflow in craft-common-actions.
+# suite's shared gate workflow in craft-common-actions, on the three desktop platforms (gap 9,
+# issue #1050): code behind `cfg(target_os)`, path and line-ending assumptions and the Metal and
+# DX12 code paths only show on their platform.
+#
+# After the gate, each leg runs the GPU tests again (CPU <-> GPU equivalence, fallback, memory,
+# shutdown) with `LIGHTCRAFT_GPU_ALLOW_SOFTWARE=1`, which only tests set: the app refuses software
+# adapters because the CPU pipeline is faster. The runners have no hardware GPU, so that admits
+# Mesa's lavapipe on Linux and WARP (DX12) on Windows; macOS runners expose a Metal device. The
+# step fails if a GPU test still skips for lack of an adapter, so "all passed" can't mean the GPU
+# tests never ran.
 on:
   push:
     branches: [main]
@@ -21,11 +30,25 @@ jobs:
     # Tracks @main so suite-wide CI fixes reach every app without a PR in each repository.
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
+      # Standard GitHub-hosted runners only: free for public repositories.
+      os: '["ubuntu-24.04","macos-latest","windows-latest"]'
       # Same craft-fonts commit as release.yml.
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
-      timeout-minutes: 90
+      # a from-scratch workspace build on macOS and Windows takes about an hour
+      timeout-minutes: 120
       # xtask ci runs cargo test: the demo scene cache is per process, so nextest is slower here.
       tools: ""
+      command: |
+        cargo xtask ci
+        echo "=== GPU tests, software adapters allowed ==="
+        skips="$RUNNER_TEMP/gpu-skips.jsonl"
+        rm -f "$skips"
+        LIGHTCRAFT_GPU_ALLOW_SOFTWARE=1 LIGHTCRAFT_SKIP_LOG="$skips" cargo test --locked -p lightcraft-gpu --tests
+        if [ -f "$skips" ]; then echo "skipped GPU tests:"; cat "$skips"; fi
+        if [ -f "$skips" ] && grep -q '"reason":"no GPU adapter' "$skips"; then
+          echo "::error::the GPU tests skipped: no GPU adapter on this runner, software ones included"
+          exit 1
+        fi
       packages: >-
         pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev
         libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers
