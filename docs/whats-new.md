@@ -11,6 +11,13 @@
 - Fielded search tokens now take inclusive comparisons: `rating:>=3`, `iso:<=400`, `f:>=2.8`, `focal:<=50`. Before,
   the `=` was read as part of the number, so such a search quietly showed no photos at all.
 
+### Paste Selected Settings pastes the crop and Remove
+- Copy Edit Settings still leaves Crop, Remove, Masking and Red Eye out by default, as Lightroom does, so a plain
+  Paste doesn't change them. Ticking one of them in Paste Selected Settings (⇧⌘V) now pastes it from the copied photo;
+  before, a group the copy had left out was silently skipped.
+- A crop pasted, pasted from the previous photo or synced onto a photo of another shape keeps its aspect ratio, angle,
+  relative size and centre instead of being stretched; on a photo of the same shape it is pasted as it is.
+
 ## 2026-10-24
 
 ### Relative-date filters and smart albums follow the clock
@@ -111,7 +118,6 @@
 ### Find the grid shortcut in View
 - Photo Grid and Square Grid now show the grid-cycle shortcut (G by default) in the View menu. The hints follow
   shortcut changes; clicking a menu row still selects that grid (issue #2500).
-
 
 ## 2026-10-21
 
