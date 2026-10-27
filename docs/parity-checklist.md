@@ -344,7 +344,7 @@ differences and missing bindings are in [ui-parity.md](ui-parity.md#shortcuts).
 |---|---|---|---|---|---|
 | LR-SYNC-COPY | Copy edit settings | P0 | ✅ | `cmd:develop.copy` | |
 | LR-SYNC-CHOOSE | Choose settings to copy | P0 | ✅ | `cmd:dialog.copySettings` | groups are coarser than per-slider |
-| LR-SYNC-PASTE | Paste to selection | P0 | ✅ | `cmd:develop.paste`, `crates/geom/src/crop.rs` (`CropGeometry::refit`) | pastes the groups chosen at copy time onto every selected photo, one undo step; Paste Selected Settings (MENU-EDIT-PASTESELECTED) chooses at paste time. A crop pasted or synced onto a photo of another shape keeps its aspect ratio, angle, relative size and centre, as in Lightroom (an uncropped photo's crop stays the whole photo) |
+| LR-SYNC-PASTE | Paste to selection | P0 | ✅ | `cmd:develop.paste`, `crates/geom/src/crop.rs` (`CropGeometry::refit`) | pastes the groups chosen at copy time onto every selected photo, one undo step; Paste Selected Settings (MENU-EDIT-PASTESELECTED) chooses at paste time. A crop pasted, synced or Auto Synced onto a photo of another shape keeps its aspect ratio, angle and relative size, as in Lightroom, centred where it was unless that would leave the turned photo; a locked ratio is kept even on an uncropped photo, an Original lock or an unlocked uncropped photo takes the new photo's shape (`Crop::refit`); presets apply their crop as stored |
 | LR-SYNC-SYNCBTN | Sync active → selected | P1 | ✅ | `cmd:develop.sync` | |
 | LR-SYNC-PREVIOUS | Paste from previous / auto sync [Classic] | P2 | ✅ | `cmd:develop.pastePrevious`, `cmd:develop.autoSync` | ⌥⌘V pastes the previously active photo's settings (copy groups); Auto Sync (⌥⇧⌘A) |
 
@@ -799,7 +799,7 @@ Latin stays upright. Advanced Japanese composition remains open. Regression cove
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-27 | minor | MENU-EDIT-PASTESELECTED, LR-SYNC-PASTE, LR-REM-SYNC, LR-MASK-SYNC: the settings clipboard keeps the copied photo's whole settings, so Paste Selected Settings pastes any ticked group, also Crop and Remove left out of the copy (issue #3056); a crop pasted, pasted from previous or synced onto a photo of another shape keeps its aspect ratio (`CropGeometry::refit`); LR-SYNC-PASTE no longer says there is no Paste Selected; status counts unchanged |
+| 2026-10-27 | minor | MENU-EDIT-PASTESELECTED, LR-SYNC-PASTE, LR-REM-SYNC, LR-MASK-SYNC: the settings clipboard keeps the copied photo's whole settings, so Paste Selected Settings pastes any ticked group, also Crop and Remove left out of the copy (issue #3056); a crop pasted, pasted from previous, synced or Auto Synced onto a photo of another shape keeps its aspect ratio and aspect lock (`CropGeometry::refit`, `Crop::refit`); LR-SYNC-PASTE no longer says there is no Paste Selected; status counts unchanged |
 | 2026-10-25 | patch | LR-BEHAV-TITLEBAR: the top bar's title-bar gestures come from craft-window's `title_bar`: a double-click follows the system setting, and a press on a button, the search field or a panel floating over the bar never moves the window; status counts unchanged |
 | 2026-10-24 | minor | KEYC-METADATA, LRC-LIB-KEYWORDS: ⌥0 / ⌥⇧0 (`keyword.nextSet`, `keyword.previousSet`) go to the next / previous keyword set; status counts unchanged (KEYC-METADATA stays 🟡) |
 | 2026-10-24 | minor | KEYC-METADATA: ⌘K / Ctrl+K (`panel.addKeywords`, Add Keywords) shows the Keywords panel, opens Keywording and puts the cursor in the Add keyword box; status counts unchanged (KEYC-METADATA stays 🟡) |
