@@ -5,8 +5,10 @@
 //! [`MAX_PER_TEST`] (issue #3066).
 //!
 //! The memory available is `MemAvailable` from `/proc/meminfo` on Linux; elsewhere, or when it
-//! can't be read, [`FALLBACK_AVAILABLE`]. The tests at once are `RUST_TEST_THREADS` when set (as
-//! `cargo xtask ci` does), else the machine's parallelism, as libtest counts them.
+//! can't be read, [`FALLBACK_AVAILABLE`]. It doesn't yet honour a cgroup memory limit (a container
+//! or CI runner): #3072 adds that to `lightcraft-sysmem`. The tests at once are counted as libtest
+//! counts them: the test binary's `--test-threads` argument, else `RUST_TEST_THREADS` (as `cargo
+//! xtask ci` sets it), else the machine's parallelism.
 
 /// The least memory one test is given, however little is available.
 pub const MIN_PER_TEST: u64 = 1 << 30;
@@ -31,18 +33,36 @@ pub fn per_test(available: Option<u64>, threads: usize) -> u64 {
     (available.unwrap_or(FALLBACK_AVAILABLE) / threads).clamp(MIN_PER_TEST, MAX_PER_TEST)
 }
 
-/// How many tests libtest runs at once in this process: `RUST_TEST_THREADS`, else the machine's
-/// parallelism, else 1.
+/// How many tests libtest runs at once in this process, in libtest's order: the binary's
+/// `--test-threads` argument, else `RUST_TEST_THREADS`, else the machine's parallelism, else 1.
 pub fn test_threads() -> usize {
+    // args_os: `std::env::args` panics on an argument that isn't Unicode
+    let args: Vec<String> = std::env::args_os().skip(1).filter_map(|a| a.into_string().ok()).collect();
     let env = std::env::var("RUST_TEST_THREADS").ok();
-    threads(env.as_deref(), std::thread::available_parallelism().ok().map(|n| n.get()))
+    threads(test_threads_arg(&args), env.as_deref(), std::thread::available_parallelism().ok().map(|n| n.get()))
 }
 
-/// [`test_threads`] from the variable's value and the machine's parallelism. A value that isn't a
-/// positive whole number is ignored (libtest refuses it too).
-pub fn threads(rust_test_threads: Option<&str>, parallelism: Option<usize>) -> usize {
-    let set = rust_test_threads.and_then(|v| v.trim().parse::<usize>().ok()).filter(|n| *n > 0);
-    set.or(parallelism).unwrap_or(1).max(1)
+/// The value of `--test-threads` in a test binary's arguments (without the program name):
+/// `--test-threads=N` or `--test-threads N`, before any `--` (after it, libtest reads filters).
+pub fn test_threads_arg(args: &[String]) -> Option<&str> {
+    let mut args = args.iter().map(String::as_str).take_while(|a| *a != "--");
+    while let Some(arg) = args.next() {
+        if let Some(value) = arg.strip_prefix("--test-threads=") {
+            return Some(value);
+        }
+        if arg == "--test-threads" {
+            return args.next();
+        }
+    }
+    None
+}
+
+/// [`test_threads`] from the `--test-threads` argument, the variable's value and the machine's
+/// parallelism, the first that is set winning. A value that isn't a positive whole number is
+/// ignored (libtest refuses it too).
+pub fn threads(arg: Option<&str>, rust_test_threads: Option<&str>, parallelism: Option<usize>) -> usize {
+    let count = |v: &str| v.trim().parse::<usize>().ok().filter(|n| *n > 0);
+    arg.and_then(count).or(rust_test_threads.and_then(count)).or(parallelism).unwrap_or(1).max(1)
 }
 
 /// The memory available to start new work without swapping (bytes), when the platform says.
@@ -99,15 +119,37 @@ mod tests {
 
     #[test]
     fn the_tests_at_once_come_from_rust_test_threads_else_the_machine() {
-        assert_eq!(threads(Some("4"), Some(16)), 4);
-        assert_eq!(threads(Some(" 2\n"), Some(16)), 2);
-        assert_eq!(threads(None, Some(16)), 16);
-        assert_eq!(threads(Some("0"), Some(16)), 16, "libtest refuses 0");
-        assert_eq!(threads(Some("four"), Some(8)), 8);
-        assert_eq!(threads(Some("-1"), None), 1);
-        assert_eq!(threads(Some("99999999999999999999999"), Some(6)), 6, "too large to count");
-        assert_eq!(threads(None, None), 1);
-        assert_eq!(threads(Some(""), Some(0)), 1);
+        assert_eq!(threads(None, Some("4"), Some(16)), 4);
+        assert_eq!(threads(None, Some(" 2\n"), Some(16)), 2);
+        assert_eq!(threads(None, None, Some(16)), 16);
+        assert_eq!(threads(None, Some("0"), Some(16)), 16, "libtest refuses 0");
+        assert_eq!(threads(None, Some("four"), Some(8)), 8);
+        assert_eq!(threads(None, Some("-1"), None), 1);
+        assert_eq!(threads(None, Some("99999999999999999999999"), Some(6)), 6, "too large to count");
+        assert_eq!(threads(None, None, None), 1);
+        assert_eq!(threads(None, Some(""), Some(0)), 1);
+    }
+
+    #[test]
+    fn the_test_threads_argument_wins_over_the_variable_and_the_machine() {
+        assert_eq!(threads(Some("32"), Some("4"), Some(8)), 32);
+        assert_eq!(threads(Some("32"), None, Some(8)), 32);
+        assert_eq!(threads(Some("1"), Some("4"), Some(8)), 1);
+        assert_eq!(threads(Some("0"), Some("4"), Some(8)), 4, "libtest refuses 0");
+        assert_eq!(threads(Some("many"), None, Some(8)), 8);
+    }
+
+    #[test]
+    fn the_test_threads_argument_is_read_as_libtest_reads_it() {
+        let args = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(test_threads_arg(&args(&["--test-threads=32"])), Some("32"));
+        assert_eq!(test_threads_arg(&args(&["tests_masking", "--test-threads", "6", "--nocapture"])), Some("6"));
+        assert_eq!(test_threads_arg(&args(&["--nocapture", "--test-threads="])), Some(""));
+        assert_eq!(test_threads_arg(&args(&["--test-threads"])), None, "no value");
+        assert_eq!(test_threads_arg(&args(&["--", "--test-threads=32"])), None, "a filter after --");
+        assert_eq!(test_threads_arg(&args(&["--test-threadsX=3", "test-threads=3"])), None);
+        assert_eq!(test_threads_arg(&args(&[])), None);
+        assert_eq!(test_threads_arg(&args(&["--test-threads=2", "--test-threads=9"])), Some("2"));
     }
 
     #[test]
@@ -142,7 +184,9 @@ mod tests {
         let share = per_test_bytes();
         assert!((MIN_PER_TEST..=MAX_PER_TEST).contains(&share), "{share}");
         assert!(test_threads() >= 1);
-        #[cfg(target_os = "linux")]
-        assert!(available_bytes().is_some(), "Linux has had MemAvailable since 3.14");
+        // /proc can be missing or masked (a sandbox, an old kernel): the share is then the fallback's
+        if available_bytes().is_none() {
+            assert_eq!(share, per_test(None, test_threads()));
+        }
     }
 }

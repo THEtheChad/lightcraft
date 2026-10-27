@@ -76,8 +76,9 @@ build is one `cargo check --target wasm32-unknown-unknown --keep-going` over the
 libtest runs several tests at once in one process, so each `ui-egui` lib test's app sizes its own
 caches (the session's cache share and the renderer's stage caches) for its test's share of the
 machine, not the whole machine: `lightcraft_testkit::memory::per_test_bytes` (`MemAvailable` ÷
-`RUST_TEST_THREADS` or the CPU count, 1–16 GiB) taken as the app's RAM. The process-wide budget, the
-decode, export and GPU gates and the demo scene cache keep their size.
+libtest's tests at once: `--test-threads`, else `RUST_TEST_THREADS`, else the CPU count; 1–16 GiB)
+taken as the app's RAM. The process-wide budget, the decode, export and GPU gates and the demo scene
+cache keep their size.
 
 `ci` also probes the machine: OS, CPUs, RAM, the GPU adapters of each backend (from the ignored
 `gpu_probe` test of `lightcraft-gpu`, run after the workspace tests so it reuses their build; xtask
