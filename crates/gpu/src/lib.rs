@@ -291,9 +291,10 @@ pub(crate) fn device() -> Option<&'static ctx::Gpu> {
     let _work = exit::enter()?;
     GPU.get_or_init(|| {
         let Some(backends) = backend::compute_backends() else { return Err("disabled by LIGHTCRAFT_GPU_BACKEND=off".into()) };
-        // on a thread of its own, at most `init::limit()`: a driver or display server that never
-        // answers leaves the GPU unavailable instead of every render waiting forever (#3068)
-        let r = backend::with_init_marker(backends, || init::create("device creation", move || ctx::Gpu::new(backends)));
+        // on a thread of its own (under the crash sentinel, counted as GPU work), waited for at most
+        // `init::limit()`: a driver or display server that never answers leaves the GPU unavailable
+        // instead of every render waiting forever (#3068)
+        let r = init::create(backends, move || ctx::Gpu::new(backends));
         if let Err(why) = &r {
             log::warn!("gpu: rendering on the CPU: {why}");
         }
