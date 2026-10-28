@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: storytold/lightcraft
-          ref: 07bc20087f7d1b5d60c9b9f14dc0f8f2ec62c3e2
+          ref: 07bc2008d9457603bb77f6b3de33a901db75a8c4
           path: lc
       - name: Build (${{ matrix.build }})
         working-directory: lc
