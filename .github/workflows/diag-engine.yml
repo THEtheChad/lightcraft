@@ -1,0 +1,50 @@
+name: diag-engine
+on:
+  push:
+    branches: [diag/windows-hardlink]
+    paths: [.github/workflows/diag-engine.yml]
+  workflow_dispatch:
+jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [package, workspace]
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      RUST_TEST_THREADS: "4"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: storytold/lightcraft
+          ref: 07bc20087f7d1b5d60c9b9f14dc0f8f2ec62c3e2
+          path: lc
+      - name: Build (${{ matrix.build }})
+        working-directory: lc
+        shell: pwsh
+        run: |
+          if ("${{ matrix.build }}" -eq "workspace") { $a = @("--workspace","--lib","--bins","--tests") } else { $a = @("-p","lightcraft-engine","--lib") }
+          cargo test @a --no-run --message-format=json-render-diagnostics | Out-File -Encoding utf8 ..\artifacts.json
+          $exe = Get-Content ..\artifacts.json | ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } |
+            Where-Object { $_.reason -eq "compiler-artifact" -and $_.profile.test -and $_.target.name -eq "lightcraft_engine" -and ($_.target.kind -contains "lib") } |
+            Select-Object -Last 1 -ExpandProperty executable
+          "engine test binary: $exe"
+          "ENGINE_EXE=$exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: originals tests alone
+        working-directory: lc/crates/engine
+        continue-on-error: true
+        run: '& $env:ENGINE_EXE originals:: --nocapture'
+        shell: pwsh
+      - name: hard-link test 5 times alone
+        working-directory: lc/crates/engine
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          1..5 | ForEach-Object { & $env:ENGINE_EXE originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused --exact 2>&1 | Select-String "test result|panicked|is the original|cannot tell" }
+      - name: full engine suite
+        working-directory: lc/crates/engine
+        continue-on-error: true
+        shell: pwsh
+        run: '& $env:ENGINE_EXE 2>&1 | Select-String "FAILED|panicked|test result|is the original"'
