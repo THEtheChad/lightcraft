@@ -21,7 +21,7 @@ jobs:
         shell: bash
         working-directory: repro
         run: |
-          whoami //priv | grep -E "SeBackupPrivilege|SeRestorePrivilege"
+          MSYS_NO_PATHCONV=1 /c/Windows/System32/whoami.exe /priv | grep -E "SeBackupPrivilege|SeRestorePrivilege" || true
           ./target/debug/lc-hardlink-repro.exe | grep -E "base: C|ids\(original\)  |strict_same\(orig" | head -3
       - name: From cmd
         shell: cmd
