@@ -2,32 +2,30 @@ name: diag-hardlink
 on:
   push:
     branches: [diag/windows-hardlink]
-  workflow_dispatch:
+    paths: [.github/workflows/diag-hardlink.yml]
 jobs:
-  diag:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, windows-2022]
-    runs-on: ${{ matrix.os }}
+  shells:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Environment
-        shell: pwsh
-        run: |
-          [Environment]::OSVersion.VersionString
-          (Get-CimInstance Win32_OperatingSystem | Select Caption, Version, BuildNumber | Format-List | Out-String).Trim()
-          "TEMP=$env:TEMP  RUNNER_TEMP=$env:RUNNER_TEMP  GITHUB_WORKSPACE=$env:GITHUB_WORKSPACE"
-          foreach ($p in @($env:TEMP, $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE)) {
-            $q = (Resolve-Path $p).Path.Substring(0,1)
-            "--- $p (drive $q)"
-            Get-Volume -DriveLetter $q | Select DriveLetter, FileSystem, FileSystemLabel, DriveType | Format-List | Out-String
-            fsutil fsinfo volumeinfo "$($q):" | Select-String "File System Name|Dev Drive|ReFS|Volume Name"
-          }
-          fsutil devdrv query 2>&1
-          whoami
-          whoami /priv
-          rustc -V
-      - name: Repro
+      - name: Build repro
         working-directory: repro
-        run: cargo run --quiet
+        run: cargo build --quiet
+      - name: From pwsh
+        shell: pwsh
+        working-directory: repro
+        run: |
+          whoami /priv | Select-String "SeBackupPrivilege|SeRestorePrivilege"
+          .\target\debug\lc-hardlink-repro.exe | Select-String "base: C|ids\(original\)  |strict_same\(orig"
+      - name: From Git Bash
+        shell: bash
+        working-directory: repro
+        run: |
+          whoami //priv | grep -E "SeBackupPrivilege|SeRestorePrivilege"
+          ./target/debug/lc-hardlink-repro.exe | grep -E "base: C|ids\(original\)  |strict_same\(orig" | head -3
+      - name: From cmd
+        shell: cmd
+        working-directory: repro
+        run: |
+          whoami /priv | findstr /C:"SeBackupPrivilege" /C:"SeRestorePrivilege"
+          target\debug\lc-hardlink-repro.exe | findstr /C:"base: C" /C:"ids(original)  " /C:"strict_same(orig"
