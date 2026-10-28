@@ -1,0 +1,10 @@
+[package]
+name = "lc-hardlink-repro"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+winapi-util = "=0.1.11"

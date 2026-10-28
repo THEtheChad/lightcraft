@@ -305,6 +305,9 @@ fn compare_files(a: &Path, b: &Path, strict: bool) -> io::Result<bool> {
         // On ReFS two files can share the 64-bit file index, so the lengths are compared first.
         #[cfg(windows)]
         {
+            if std::env::var_os("LC_DIAG_SAME_FILE").is_some() {
+                eprintln!("DIAG compare_files strict={strict} a={} b={} len={} ids={:?} ida={:?} idb={:?}", a.display(), b.display(), ma.len(), file_ids(a, b), winapi_util::Handle::from_path_any(a).map(|_| "open"), winapi_util::Handle::from_path_any(b).map(|_| "open"));
+            }
             match file_ids(a, b).and_then(|(ia, ib)| same_file_id(ia, ib, strict)) {
                 Ok(true) => return Ok(true),
                 Ok(_) => {}

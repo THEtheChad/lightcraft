@@ -6,7 +6,7 @@ permissions:
   contents: read
 
 jobs:
-  baseline:
+  instrumented:
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
       os: '["windows-latest"]'
@@ -15,46 +15,8 @@ jobs:
       tools: ""
       packages: ""
       command: |
-        true
+        echo "=== standalone repro inside the gate"
+        (cd diag-repro && cargo run --quiet 2>&1 | head -30)
         T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
-        echo "=== variant: baseline"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
-        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
-  incremental-on:
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
-    with:
-      os: '["windows-latest"]'
-      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
-      timeout-minutes: 120
-      tools: ""
-      packages: ""
-      command: |
-        export CARGO_INCREMENTAL=1
-        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
-        echo "=== variant: incremental-on"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
-        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
-  no-craft-fonts:
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
-    with:
-      os: '["windows-latest"]'
-      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
-      timeout-minutes: 120
-      tools: ""
-      packages: ""
-      command: |
-        unset CRAFT_FONTS_DIR CRAFT_FONTS_REQUIRED
-        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
-        echo "=== variant: no-craft-fonts"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
-        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
-  fresh-target:
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
-    with:
-      os: '["windows-latest"]'
-      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
-      timeout-minutes: 120
-      tools: ""
-      packages: ""
-      command: |
-        export CARGO_TARGET_DIR="$RUNNER_TEMP/fresh-target"
-        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
-        echo "=== variant: fresh-target"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
-        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
+        echo "=== instrumented LightCraft test"
+        LC_DIAG_SAME_FILE=1 cargo test -p lightcraft-engine --lib -- $T --exact --nocapture 2>&1 | grep -E "DIAG|test result|is the original|cannot tell|panicked" || true
