@@ -6,7 +6,7 @@ permissions:
   contents: read
 
 jobs:
-  workspace-tests:
+  same-binary:
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
       os: '["windows-latest"]'
@@ -15,16 +15,15 @@ jobs:
       tools: ""
       packages: ""
       command: |
-        export RUST_TEST_THREADS=4
-        cargo test --workspace --lib --bins --tests --no-fail-fast 2>&1 | grep -E "Running |\.\.\. FAILED|test result|is the original|cannot tell" || true
-  engine-only:
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
-    with:
-      os: '["windows-latest"]'
-      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
-      timeout-minutes: 120
-      tools: ""
-      packages: ""
-      command: |
-        export RUST_TEST_THREADS=4
-        for i in 1 2 3; do echo "--- engine run $i"; cargo test -p lightcraft-engine --lib 2>&1 | grep -E "\.\.\. FAILED|test result|is the original|cannot tell" || true; done
+        cargo test -p lightcraft-engine --lib --no-run --message-format=json-render-diagnostics > "$RUNNER_TEMP/a.json"
+        exe=$(grep -o '"executable":"[^"]*lightcraft_engine-[^"]*"' "$RUNNER_TEMP/a.json" | tail -1 | sed 's/"executable":"//; s/"$//; s#\\\\#/#g')
+        echo "binary: $exe"
+        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
+        cd crates/engine
+        echo "=== env of the bash gate (selected)"; env | grep -E '^(TMP|TEMP|TMPDIR|MSYS|CARGO_|RUST|CRAFT|PATH=)' | cut -c1-200
+        echo "=== 1. from bash, gate env"; "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
+        echo "=== 2. from bash, env -i (SYSTEMROOT, PATH, TEMP/TMP kept)"; env -i SYSTEMROOT="$SYSTEMROOT" PATH="$PATH" TEMP="$TEMP" TMP="$TMP" "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
+        echo "=== 3. from pwsh"; pwsh -NoProfile -Command "& '$exe' $T --exact 2>&1 | Select-String 'test result|is the original|cannot tell'" || true
+        echo "=== 4. from cmd"; cmd //c "\"$(cygpath -w "$exe")\" $T --exact" 2>&1 | grep -E "test result|is the original|cannot tell" || true
+        echo "=== 5. from bash, TEMP/TMP set to RUNNER_TEMP"; TEMP="$(cygpath -w "$RUNNER_TEMP")" TMP="$(cygpath -w "$RUNNER_TEMP")" "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
+        echo "=== 6. repro-style check of TEMP from this shell"; echo "TEMP=$TEMP TMP=$TMP"; cmd //c "echo %TEMP% & echo %TMP%"
