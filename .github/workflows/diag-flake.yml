@@ -5,12 +5,6 @@ on:
     paths: [.github/workflows/diag-flake.yml]
 jobs:
   flake:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { tree: main, repo: storytold/lightcraft, ref: 07bc2008d9457603bb77f6b3de33a901db75a8c4 }
-          - { tree: pr1148, repo: THEtheChad/lightcraft, ref: dc73e0845e686153f6c5a6654b08dde6e17dae12 }
     runs-on: windows-latest
     timeout-minutes: 120
     env:
@@ -18,7 +12,7 @@ jobs:
       CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@v4
-        with: { repository: "${{ matrix.repo }}", ref: "${{ matrix.ref }}", path: lc }
+        with: { repository: THEtheChad/lightcraft, ref: dc73e0845e686153f6c5a6654b08dde6e17dae12, path: lc }
       - name: Build
         working-directory: lc
         shell: pwsh
@@ -26,16 +20,14 @@ jobs:
           cargo test -p lightcraft-engine --lib --no-run --message-format=json-render-diagnostics | Out-File -Encoding utf8 ..\a.json
           $exe = Get-Content ..\a.json | % { try { $_ | ConvertFrom-Json } catch {} } | ? { $_.reason -eq "compiler-artifact" -and $_.profile.test -and $_.target.name -eq "lightcraft_engine" } | Select -Last 1 -Expand executable
           "ENGINE_EXE=$exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      - name: full suite x3
+      - name: full suite x6, failures in full
         working-directory: lc/crates/engine
         continue-on-error: true
         shell: pwsh
         run: |
-          1..3 | % { "--- full run $_"; & $env:ENGINE_EXE 2>&1 | Select-String "\.\.\. FAILED|test result|is the original" }
-      - name: full suite x3 skipping the sr2 test
-        if: matrix.tree == 'pr1148'
-        working-directory: lc/crates/engine
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          1..3 | % { "--- skip-sr2 run $_"; & $env:ENGINE_EXE --skip recursive_discovery_includes_sony 2>&1 | Select-String "\.\.\. FAILED|test result|is the original" }
+          1..6 | % {
+            "=== full run $_"
+            $out = & $env:ENGINE_EXE 2>&1 | Out-String
+            $i = $out.IndexOf("failures:")
+            if ($i -ge 0) { $out.Substring($i) } else { ($out -split "`n" | Select-String "test result").Line }
+          }
