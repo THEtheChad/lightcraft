@@ -1,0 +1,25 @@
+name: diag-gate
+on:
+  push:
+    branches: [diag/gate-main]
+jobs:
+  workspace-tests:
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      os: '["windows-latest"]'
+      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      timeout-minutes: 120
+      tools: ""
+      command: |
+        export RUST_TEST_THREADS=4
+        cargo test --workspace --lib --bins --tests --no-fail-fast 2>&1 | grep -E "Running |\.\.\. FAILED|test result|is the original|cannot tell" || true
+  engine-only:
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      os: '["windows-latest"]'
+      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      timeout-minutes: 120
+      tools: ""
+      command: |
+        export RUST_TEST_THREADS=4
+        for i in 1 2 3; do echo "--- engine run $i"; cargo test -p lightcraft-engine --lib 2>&1 | grep -E "\.\.\. FAILED|test result|is the original|cannot tell" || true; done
