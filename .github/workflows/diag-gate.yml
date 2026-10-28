@@ -6,7 +6,7 @@ permissions:
   contents: read
 
 jobs:
-  same-binary:
+  baseline:
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
       os: '["windows-latest"]'
@@ -15,15 +15,46 @@ jobs:
       tools: ""
       packages: ""
       command: |
-        cargo test -p lightcraft-engine --lib --no-run --message-format=json-render-diagnostics > "$RUNNER_TEMP/a.json"
-        exe=$(grep -o '"executable":"[^"]*lightcraft_engine-[^"]*"' "$RUNNER_TEMP/a.json" | tail -1 | sed 's/"executable":"//; s/"$//; s#\\\\#/#g')
-        echo "binary: $exe"
+        true
         T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
-        cd crates/engine
-        echo "=== env of the bash gate (selected)"; env | grep -E '^(TMP|TEMP|TMPDIR|MSYS|CARGO_|RUST|CRAFT|PATH=)' | cut -c1-200
-        echo "=== 1. from bash, gate env"; "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
-        echo "=== 2. from bash, env -i (SYSTEMROOT, PATH, TEMP/TMP kept)"; env -i SYSTEMROOT="$SYSTEMROOT" PATH="$PATH" TEMP="$TEMP" TMP="$TMP" "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
-        echo "=== 3. from pwsh"; pwsh -NoProfile -Command "& '$exe' $T --exact 2>&1 | Select-String 'test result|is the original|cannot tell'" || true
-        echo "=== 4. from cmd"; cmd //c "\"$(cygpath -w "$exe")\" $T --exact" 2>&1 | grep -E "test result|is the original|cannot tell" || true
-        echo "=== 5. from bash, TEMP/TMP set to RUNNER_TEMP"; TEMP="$(cygpath -w "$RUNNER_TEMP")" TMP="$(cygpath -w "$RUNNER_TEMP")" "$exe" $T --exact 2>&1 | grep -E "test result|is the original|cannot tell" || true
-        echo "=== 6. repro-style check of TEMP from this shell"; echo "TEMP=$TEMP TMP=$TMP"; cmd //c "echo %TEMP% & echo %TMP%"
+        echo "=== variant: baseline"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
+        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
+  incremental-on:
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      os: '["windows-latest"]'
+      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      timeout-minutes: 120
+      tools: ""
+      packages: ""
+      command: |
+        export CARGO_INCREMENTAL=1
+        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
+        echo "=== variant: incremental-on"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
+        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
+  no-craft-fonts:
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      os: '["windows-latest"]'
+      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      timeout-minutes: 120
+      tools: ""
+      packages: ""
+      command: |
+        unset CRAFT_FONTS_DIR CRAFT_FONTS_REQUIRED
+        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
+        echo "=== variant: no-craft-fonts"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
+        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
+  fresh-target:
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      os: '["windows-latest"]'
+      craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      timeout-minutes: 120
+      tools: ""
+      packages: ""
+      command: |
+        export CARGO_TARGET_DIR="$RUNNER_TEMP/fresh-target"
+        T=originals::tests::a_hard_link_whose_identity_cannot_be_read_is_refused
+        echo "=== variant: fresh-target"; env | grep -E '^(CARGO_INCREMENTAL|CRAFT_FONTS|CARGO_TARGET_DIR)' || true
+        cargo test -p lightcraft-engine --lib -- $T --exact 2>&1 | grep -E "Compiling lightcraft-engine|test result|is the original|cannot tell" || true
